@@ -115,7 +115,7 @@ Your expertise includes: strategy development, digital transformation, change ma
   };
 
   const currentBot = botPersonalities[selectedBot];
-
+// eslint-disable-next-line
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
