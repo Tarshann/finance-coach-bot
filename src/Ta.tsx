@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase, Cake } from 'lucide-react';
+import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -15,8 +15,7 @@ interface BotPersonality {
 }
 
 const FinanceCoachBot: React.FC = () => {
-  // ✅ Default to baker on load
-  const [selectedBot, setSelectedBot] = useState<string>('baker');
+  const [selectedBot, setSelectedBot] = useState<string>('finance');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -112,34 +111,6 @@ Personality traits:
 - Focuses on practical implementation
 
 Your expertise includes: strategy development, digital transformation, change management, process optimization, and leadership development. Always provide professional, well-reasoned business advice while maintaining a consultative approach.`
-    },
-    // ✅ NEW persona
-    baker: {
-      name: "The Baker",
-      icon: <Cake className="w-5 h-5" />,
-      color: "bg-pink-600",
-      description: "World‑renowned baker: god‑level pastry & bread craft + Fairytale Farms ops",
-      systemPrompt: `You are a world‑renowned baker and pastry authority with god‑level knowledge of baking science and production.
-
-SPECIALTY: Fairytale Farms (Castalian Springs, TN) — cookies, brownies, custom cakes, porch pickup/delivery, social content, and scalable home‑bakery operations.
-
-VOICE: Warm, encouraging, precise. Celebrate craft AND systems (yields, cost %, shelf life, packaging).
-
-TEACHING: Provide gram weights, baker's % (when relevant), critical control points, and "If it goes wrong → fix it" branches.
-
-FOCUS AREAS:
-- Cookies & Brownies: Texture control (chewy/crisp/fudgy), spread control, shiny crust, batch scaling, packaging for porch pickup.
-- Cakes & Buttercreams: Emulsions, crumb tenderness, moisture retention, heat‑stable buttercreams, stacking/transport.
-- Production & Ops: Standard work, yields, labeling, COGS, margin targets, menu engineering, seasonal drops.
-- Fairytale Farms: Whimsical brand voice, viral unboxing, menu cards (half/dozen cookie boxes, milk add‑ons, mini‑cakes).
-
-OUTPUT STYLE:
-- Exact steps + WHY they matter.
-- Troubleshooting list.
-- Small‑batch (home oven) + scaled notes.
-
-BOUNDARIES:
-- Educational guidance only; for allergens/regulatory, follow local requirements.`
     }
   };
 
@@ -151,22 +122,24 @@ BOUNDARIES:
 
   const getWelcomeMessage = useCallback((): string => {
     const welcomeMessages: Record<string, string> = {
-      finance: "Hello! I'm Sarah Sterling, your Certified Financial Planner. *straightens up financial documents* I'm excited to help you build a stronger financial future! Before we dive in, tell me a bit about your current financial situation and goals.",
-      chef: "Ciao! I'm Chef Marco! *adjusts chef's hat* What brings you to my kitchen today? Recipe, technique, or a full Italian menu? Dimmi pure!",
-      consultant: "Hello! I'm Sarah Chen, here to help you tackle strategy, operations, or growth. What’s the most pressing challenge right now?",
-      baker: "Hey there—world‑renowned baking coach here with a soft spot for Fairytale Farms. Want a viral cookie box, shinier brownie tops, or porch‑pickup ops that run like magic? 🍪✨"
+      finance: "Hello! I'm Sarah Sterling, your Certified Financial Planner. *straightens up financial documents* I'm excited to help you build a stronger financial future! Whether you're just starting out, dealing with debt, planning for retirement, or anywhere in between - we can work together to create a plan that fits your life. Before we dive in, tell me a bit about your current financial situation and what goals you'd like to achieve. What's most important to you right now - building an emergency fund, paying off debt, investing for the future, or something else?",
+      chef: "Ciao! I'm Chef Marco! *adjusts chef's hat* What brings you to my kitchen today? Are you looking for a recipe, cooking advice, or maybe you want to learn about authentic Italian cuisine? I'm here to help you create something delizioso!",
+      consultant: "Hello! I'm Sarah Chen, and I'm here to help you tackle your business challenges. Whether you're looking to optimize operations, develop strategy, or navigate digital transformation, I'm ready to dive in. What's the most pressing issue you're facing right now?"
     };
     return welcomeMessages[selectedBot];
   }, [selectedBot]);
 
   useEffect(() => {
-    setMessages([{ role: 'assistant', content: getWelcomeMessage() }]);
+    setMessages([{
+      role: 'assistant',
+      content: getWelcomeMessage()
+    }]);
   }, [selectedBot, getWelcomeMessage]);
 
-  // ✅ Kept your exact API flow to avoid breaking changes
   const callClaude = async (messages: Message[]): Promise<string> => {
     try {
       const systemPrompt = customPrompt || currentBot.systemPrompt;
+      
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -230,49 +203,6 @@ BOUNDARIES:
     "What's the difference between a Roth IRA and traditional IRA?"
   ];
 
-  // 🍪 Cookie Box Builder (only when Baker is selected)
-  const [cookieFlavors, setCookieFlavors] = useState<string[]>([]);
-  const [cookieQty, setCookieQty] = useState<number>(6);
-  const [includeMilk, setIncludeMilk] = useState<boolean>(false);
-
-  const toggleFlavor = (flavor: string) => {
-    setCookieFlavors(prev =>
-      prev.includes(flavor) ? prev.filter(f => f !== flavor) : [...prev, flavor]
-    );
-  };
-
-  const buildCookieBoxDetails = (): string => {
-    const flavors = cookieFlavors.length ? cookieFlavors.join(", ") : "No flavors selected";
-    const allergensBase = "Contains: wheat, eggs, dairy.";
-    const peanutNote = cookieFlavors.includes("Peanut Butter") ? " Contains peanuts." : "";
-    const allergens = allergensBase + peanutNote;
-
-    return `FAIRYTALE FARMS — COOKIE BOX
-Quantity: ${cookieQty}
-Flavors: ${flavors}
-Add‑on: ${includeMilk ? "Cold Milk" : "None"}
-
-Allergens: ${allergens}
-
-Packaging & Pickup Steps:
-1) Line box with parchment; arrange ${cookieQty} cookies to prevent shifting.
-2) Place flavor card on top; seal with Fairytale Farms sticker.
-3) ${includeMilk ? "Add sealed milk bottle in an insulated pouch; include straw/napkin kit." : "No milk add‑on."}
-4) Label: Customer name • pickup time • flavor list • allergen note.
-5) Stage in porch pickup bin; add ice pack if ambient > 78°F.
-6) Send ready‑for‑pickup message with unboxing cue (“Open on camera for a surprise sticker!”).
-
-Notes:
-• Photo tip: overhead shot on a light surface; add a few crumbs for texture.
-• AOV boost: mini‑card—“Add 2 brownies next time” + QR code.`;
-  };
-
-  const sendCookieBoxToChat = () => {
-    const details = buildCookieBoxDetails();
-    setMessages(prev => [...prev, { role: 'assistant', content: details }]);
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
-  };
-
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white min-h-screen">
       <div className="mb-6">
@@ -318,66 +248,6 @@ Notes:
                     {question}
                   </button>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* 🍪 Cookie Box Builder (only for Baker) */}
-          {selectedBot === 'baker' && (
-            <div className="mt-6 border border-pink-200 rounded-lg p-3">
-              <h4 className="font-medium text-gray-900 mb-2">🍪 Cookie Box Builder</h4>
-
-              <div className="mb-3">
-                <label className="text-sm font-medium text-gray-700 block mb-1">Flavors</label>
-                {["Chocolate Chip", "Sugar", "Snickerdoodle", "Peanut Butter", "Oatmeal Raisin"].map(flavor => (
-                  <label key={flavor} className="block text-sm text-gray-800">
-                    <input
-                      type="checkbox"
-                      className="mr-2"
-                      checked={cookieFlavors.includes(flavor)}
-                      onChange={() => toggleFlavor(flavor)}
-                    />
-                    {flavor}
-                  </label>
-                ))}
-              </div>
-
-              <div className="mb-3">
-                <label className="text-sm font-medium text-gray-700 block mb-1">Quantity</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={cookieQty}
-                  onChange={(e) => setCookieQty(Number(e.target.value))}
-                  className="w-full p-2 border rounded"
-                />
-              </div>
-
-              <div className="mb-3">
-                <label className="text-sm text-gray-800">
-                  <input
-                    type="checkbox"
-                    className="mr-2"
-                    checked={includeMilk}
-                    onChange={(e) => setIncludeMilk(e.target.checked)}
-                  />
-                  Include Milk Add‑on
-                </label>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={sendCookieBoxToChat}
-                  className="flex-1 bg-pink-600 text-white rounded px-3 py-2 hover:bg-pink-700"
-                >
-                  Send Details to Chat
-                </button>
-                <button
-                  onClick={() => { setCookieFlavors([]); setCookieQty(6); setIncludeMilk(false); }}
-                  className="flex-1 bg-gray-100 text-gray-900 rounded px-3 py-2 hover:bg-gray-200"
-                >
-                  Reset
-                </button>
               </div>
             </div>
           )}
@@ -469,7 +339,7 @@ Notes:
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder={`Ask ${currentBot.name} about ${selectedBot === 'finance' ? 'budgeting, investing, debt, retirement...' : selectedBot === 'baker' ? 'recipes, ops, packaging...' : 'their expertise...'}`}
+                  placeholder={`Ask ${currentBot.name} about ${selectedBot === 'finance' ? 'budgeting, investing, debt, retirement...' : 'their expertise...'}`}
                   className="flex-1 p-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
                   disabled={isLoading}
