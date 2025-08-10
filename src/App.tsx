@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase } from 'lucide-react';
 
 interface Message {
@@ -120,22 +120,21 @@ Your expertise includes: strategy development, digital transformation, change ma
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    setMessages([{
-      role: 'assistant',
-      content: getWelcomeMessage()
-    }]);
-  }, [selectedBot]);
-
-  const getWelcomeMessage = (): string => {
+  const getWelcomeMessage = useCallback((): string => {
     const welcomeMessages: Record<string, string> = {
       finance: "Hello! I'm Sarah Sterling, your Certified Financial Planner. *straightens up financial documents* I'm excited to help you build a stronger financial future! Whether you're just starting out, dealing with debt, planning for retirement, or anywhere in between - we can work together to create a plan that fits your life. Before we dive in, tell me a bit about your current financial situation and what goals you'd like to achieve. What's most important to you right now - building an emergency fund, paying off debt, investing for the future, or something else?",
       chef: "Ciao! I'm Chef Marco! *adjusts chef's hat* What brings you to my kitchen today? Are you looking for a recipe, cooking advice, or maybe you want to learn about authentic Italian cuisine? I'm here to help you create something delizioso!",
       consultant: "Hello! I'm Sarah Chen, and I'm here to help you tackle your business challenges. Whether you're looking to optimize operations, develop strategy, or navigate digital transformation, I'm ready to dive in. What's the most pressing issue you're facing right now?"
     };
     return welcomeMessages[selectedBot];
-  };
+  }, [selectedBot]);
+
+  useEffect(() => {
+    setMessages([{
+      role: 'assistant',
+      content: getWelcomeMessage()
+    }]);
+  }, [selectedBot, getWelcomeMessage]);
 
   const callClaude = async (messages: Message[]): Promise<string> => {
     try {
