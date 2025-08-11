@@ -164,35 +164,33 @@ BOUNDARIES:
   }, [selectedBot, getWelcomeMessage]);
 
   // ✅ Kept your exact API flow to avoid breaking changes
-  const callClaude = async (messages: Message[]): Promise<string> => {
-    try {
-      const systemPrompt = customPrompt || currentBot.systemPrompt;
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-20240620",
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: messages
-        })
-      });
+const callClaude = async (messages: Message[]): Promise<string> => {
+  try {
+    const systemPrompt = customPrompt || currentBot.systemPrompt;
+    
+    const response = await fetch("/.netlify/functions/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: messages,
+        systemPrompt: systemPrompt
+      })
+    });
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.content[0].text;
-    } catch (error) {
-      console.error("Error calling Claude:", error);
-      throw error;
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
     }
-  };
 
-  const sendMessage = async (): Promise<void> => {
+    const data = await response.json();
+    return data.content[0].text;
+  } catch (error) {
+    console.error("Error calling Claude:", error);
+    throw error;
+  }
+};
+  async function sendMessage(): Promise<void> {
     if (!inputMessage.trim() || isLoading) return;
 
     const userMessage: Message = { role: 'user', content: inputMessage };
@@ -205,14 +203,14 @@ BOUNDARIES:
       const response = await callClaude(newMessages);
       setMessages([...newMessages, { role: 'assistant', content: response }]);
     } catch (error) {
-      setMessages([...newMessages, { 
-        role: 'assistant', 
-        content: "I apologize, but I'm having trouble responding right now. Please try again in a moment." 
+      setMessages([...newMessages, {
+        role: 'assistant',
+        content: "I apologize, but I'm having trouble responding right now. Please try again in a moment."
       }]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   const handleKeyPress = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter' && !e.shiftKey) {
