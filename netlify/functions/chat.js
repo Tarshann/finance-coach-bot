@@ -1,3 +1,5 @@
+const fetch = require('node-fetch');
+
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -16,11 +18,16 @@ exports.handler = async (event, context) => {
   try {
     const { messages, systemPrompt } = JSON.parse(event.body);
     
+    const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error('API key not found');
+    }
+    
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
