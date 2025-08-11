@@ -168,22 +168,14 @@ const callClaude = async (messages: Message[]): Promise<string> => {
   try {
     const systemPrompt = customPrompt || currentBot.systemPrompt;
     
-    // Convert messages to OpenAI format
-    const openAIMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages
-    ];
-    
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("/.netlify/functions/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "gpt-4",
-        messages: openAIMessages,
-        max_tokens: 1000
+        messages: messages,
+        systemPrompt: systemPrompt
       })
     });
 
@@ -192,9 +184,9 @@ const callClaude = async (messages: Message[]): Promise<string> => {
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+    return data.content[0].text;
   } catch (error) {
-    console.error("Error calling OpenAI:", error);
+    console.error("Error calling Claude:", error);
     throw error;
   }
 };
