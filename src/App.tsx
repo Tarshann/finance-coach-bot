@@ -168,18 +168,22 @@ const callClaude = async (messages: Message[]): Promise<string> => {
   try {
     const systemPrompt = customPrompt || currentBot.systemPrompt;
     
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // Convert messages to OpenAI format
+    const openAIMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages
+    ];
+    
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.REACT_APP_ANTHROPIC_API_KEY || "",
-        "anthropic-version": "2023-06-01"
+        "Authorization": `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20240620",
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: messages
+        model: "gpt-4",
+        messages: openAIMessages,
+        max_tokens: 1000
       })
     });
 
@@ -188,9 +192,9 @@ const callClaude = async (messages: Message[]): Promise<string> => {
     }
 
     const data = await response.json();
-    return data.content[0].text;
+    return data.choices[0].message.content;
   } catch (error) {
-    console.error("Error calling Claude:", error);
+    console.error("Error calling OpenAI:", error);
     throw error;
   }
 };
