@@ -20,9 +20,14 @@ exports.handler = async (event, context) => {
     
     const apiKey = process.env.REACT_APP_ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error('API key not found');
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: 'API key not configured' })
+      };
     }
     
+    // Use built-in fetch (Node 18+)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -38,10 +43,19 @@ exports.handler = async (event, context) => {
       })
     });
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        statusCode: response.status,
+        headers,
+        body: JSON.stringify({ error: `Anthropic API error: ${errorText}` })
+      };
+    }
+
     const data = await response.json();
     
     return {
-      statusCode: response.ok ? 200 : response.status,
+      statusCode: 200,
       headers,
       body: JSON.stringify(data)
     };
@@ -50,7 +64,7 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ error: `Function error: ${error.message}` })
     };
   }
 };
