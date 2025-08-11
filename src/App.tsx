@@ -166,8 +166,11 @@ BOUNDARIES:
   // ✅ Kept your exact API flow to avoid breaking changes
 const callClaude = async (messages: Message[]): Promise<string> => {
   try {
-    const systemPrompt = customPrompt || currentBot.systemPrompt;
+    // DEBUG: Check if API key is available
+    console.log('API Key available:', !!process.env.REACT_APP_ANTHROPIC_API_KEY);
+    console.log('API Key first 10 chars:', process.env.REACT_APP_ANTHROPIC_API_KEY?.substring(0, 10));
     
+    const systemPrompt = customPrompt || currentBot.systemPrompt;
     const response = await fetch("https://cors-anywhere.herokuapp.com/https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
