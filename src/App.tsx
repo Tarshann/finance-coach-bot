@@ -168,14 +168,18 @@ const callClaude = async (messages: Message[]): Promise<string> => {
   try {
     const systemPrompt = customPrompt || currentBot.systemPrompt;
     
-    const response = await fetch("/.netlify/functions/chat", {
+    const response = await fetch("https://cors-anywhere.herokuapp.com/https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": process.env.REACT_APP_ANTHROPIC_API_KEY || "",
+        "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        messages: messages,
-        systemPrompt: systemPrompt
+        model: "claude-3-5-sonnet-20240620",
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: messages
       })
     });
 
