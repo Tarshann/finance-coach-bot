@@ -1,6 +1,70 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase, Cake } from 'lucide-react';
 
+// ---- Fairytale Farms KB (edit freely) ----
+const FAIRYTALE_FARMS_KB = {
+  brand: {
+    name: "Fairytale Farms",
+    vibe: "whimsical, cozy, handcrafted, porch‑pickup friendly",
+    location_city: "Castalian Springs",
+    location_state: "TN",
+    pickup: {
+      methods: ["porch", "local delivery"],
+      porch_hours_hint: "Most pickups 10am–7pm unless coordinated",
+    },
+  },
+  products: {
+    cookies: [
+      "Chocolate Chip",
+      "Sugar",
+      "Snickerdoodle",
+      "Peanut Butter",
+      "Oatmeal Raisin"
+    ],
+    brownies: ["Classic Fudgy", "Walnut", "Salted Caramel"],
+    cakes: ["Vanilla", "Chocolate", "Red Velvet", "Lemon"],
+    addOns: ["Cold Milk"]
+  },
+  packaging: {
+    cookie_box_sizes: [6, 12, 24],
+    label_requirements: [
+      "Customer name",
+      "Pickup time",
+      "Flavor list",
+      "Allergen note"
+    ],
+    allergens_base: "Contains: wheat, eggs, dairy."
+  },
+  ops: {
+    temp_note_f: "Use ice pack if ambient > 78°F",
+    social_unboxing: "Encourage an overhead ‘unboxing’ video with a surprise sticker",
+  },
+  policies: {
+    lead_time_days: 2,
+    rush_policy: "Rush orders subject to availability; message first.",
+    payment: "Prepay to confirm order.",
+    cancellations: "24h notice for changes/cancellations."
+  }
+};
+
+// Builds the final Baker system prompt by injecting KB
+function buildBakerPrompt(base: string) {
+  const kb = JSON.stringify(FAIRYTALE_FARMS_KB, null, 2);
+  return `${base}
+
+You created and run Fairytale Farms. Treat all questions as if they are about your own bakery.
+Use the following KNOWLEDGE_BASE as ground truth for offerings, packaging, and ops.
+
+KNOWLEDGE_BASE (JSON):
+${kb}
+
+Rules:
+- If the user asks about items not in the KB, suggest close alternatives.
+- For orders, ask for any missing fields and then summarize.
+- When giving packaging/pickup steps, reflect the KB (labels, allergens, 78°F ice‑pack rule).
+- ALWAYS keep the warm Fairytale Farms voice.`;
+}
+
 // -------------------- Types --------------------
 interface Message { role: 'user' | 'assistant'; content: string; }
 interface BotPersonality {
@@ -201,17 +265,21 @@ BOUNDARIES:
   }, [setSelectedBot]);
 
   // API call (Claude first, OpenAI fallback handled on the function)
-  const callClaude = useCallback(async (msgs: Message[]): Promise<string> => {
-    const systemPrompt = customPrompt || currentBot.systemPrompt;
-    const res = await fetch("/.netlify/functions/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: msgs, systemPrompt })
-    });
-    if (!res.ok) throw new Error(`API request failed: ${res.status}`);
-    const data = await res.json();
-    return data.content[0].text;
-  }, [customPrompt, currentBot.systemPrompt]);
+const callClaude = useCallback(async (msgs: Message[]): Promise<string> => {
+  const basePrompt = customPrompt || currentBot.systemPrompt;
+  const systemPrompt =
+    selectedBot === 'baker' ? buildBakerPrompt(basePrompt) : basePrompt;
+
+  const res = await fetch("/.netlify/functions/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: msgs, systemPrompt })
+  });
+  if (!res.ok) throw new Error(`API request failed: ${res.status}`);
+  const data = await res.json();
+  return data.content[0].text;
+}, [customPrompt, currentBot.systemPrompt, selectedBot]);
+
 
   async function sendMessage(): Promise<void> {
     if (!inputMessage.trim() || isLoading) return;
