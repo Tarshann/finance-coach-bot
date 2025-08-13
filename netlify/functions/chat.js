@@ -14,15 +14,18 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { messages, systemPrompt, provider = 'anthropic' } = JSON.parse(event.body);
+    const { messages, systemPrompt } = JSON.parse(event.body);
     
-    if (provider === 'anthropic') {
-      // Use Anthropic Claude
+    // Try Anthropic first
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    
+    if (anthropicKey) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': process.env.REACT_APP_ANTHROPIC_API_KEY,
+          'x-api-key': anthropicKey,
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
@@ -33,15 +36,18 @@ exports.handler = async (event, context) => {
         })
       });
 
-      const data = await response.json();
-      return {
-        statusCode: response.ok ? 200 : response.status,
-        headers,
-        body: JSON.stringify(data)
-      };
-      
-    } else {
-      // Use OpenAI GPT
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify(data)
+        };
+      }
+    }
+    
+    // Fallback to OpenAI
+    if (openaiKey) {
       const openAIMessages = [
         { role: "system", content: systemPrompt },
         ...messages
@@ -51,7 +57,7 @@ exports.handler = async (event, context) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`
+          'Authorization': `Bearer ${openaiKey}`
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
@@ -62,17 +68,18 @@ exports.handler = async (event, context) => {
 
       const data = await response.json();
       
-      // Convert to Anthropic-like format
       const result = {
         content: [{ text: data.choices[0].message.content }]
       };
       
       return {
-        statusCode: response.ok ? 200 : response.status,
+        statusCode: 200,
         headers,
         body: JSON.stringify(result)
       };
     }
+    
+    throw new Error('No API keys available');
     
   } catch (error) {
     return {
