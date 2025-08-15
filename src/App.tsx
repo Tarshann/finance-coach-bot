@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase, Cake } from 'lucide-react';
+import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase, Cake, Brain, Clock, Sparkles, Palette, Heart, Zap, TrendingUp } from 'lucide-react';
 
 // ---- Fairytale Farms KB (edit freely) ----
 const FAIRYTALE_FARMS_KB = {
@@ -37,7 +37,7 @@ const FAIRYTALE_FARMS_KB = {
   },
   ops: {
     temp_note_f: "Use ice pack if ambient > 78°F",
-    social_unboxing: "Encourage an overhead ‘unboxing’ video with a surprise sticker",
+    social_unboxing: "Encourage an overhead 'unboxing' video with a surprise sticker",
   },
   policies: {
     lead_time_days: 2,
@@ -66,9 +66,33 @@ Rules:
 }
 
 // -------------------- Types --------------------
-interface Message { role: 'user' | 'assistant'; content: string; }
+interface Message { role: 'user' | 'assistant'; content: string; timestamp?: Date; }
 interface BotPersonality {
-  name: string; icon: React.ReactElement; color: string; description: string; systemPrompt: string;
+  name: string; 
+  icon: React.ReactElement; 
+  color: string; 
+  gradient: string;
+  description: string; 
+  systemPrompt: string;
+  traits: string[];
+  environment: string;
+}
+
+interface ConversationNode {
+  id: number;
+  message: string;
+  type: 'user' | 'ai' | 'system';
+  timestamp: Date;
+  personality: string;
+  emotional: string;
+}
+
+interface CanvasThought {
+  id: number;
+  text: string;
+  x: number;
+  y: number;
+  opacity: number;
 }
 
 // -------------------- Helpers --------------------
@@ -78,6 +102,8 @@ const STORAGE = {
   cookieFlavors: 'cookie.flavors',
   cookieQty: 'cookie.qty',
   cookieMilk: 'cookie.milk',
+  conversationNodes: 'ui.conversationNodes',
+  emotionalState: 'ui.emotionalState',
 };
 
 function usePersistentState<T>(key: string, initial: T) {
@@ -166,13 +192,25 @@ function Markdown({ text }: { text: string }) {
 
 // -------------------- App --------------------
 const App: React.FC = () => {
-  // Default to baker, then persist
+  // Core state
   const [selectedBot, setSelectedBot] = usePersistentState<string>(STORAGE.persona, 'baker');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showSystemPrompt, setShowSystemPrompt] = useState<boolean>(false);
   const [customPrompt, setCustomPrompt] = usePersistentState<string>(STORAGE.customPrompt, '');
+  
+  // Neural AI features
+  const [conversationNodes, setConversationNodes] = usePersistentState<ConversationNode[]>(STORAGE.conversationNodes, []);
+  const [predictiveResponses, setPredictiveResponses] = useState<string[]>([]);
+  const [emotionalState, setEmotionalState] = usePersistentState<string>(STORAGE.emotionalState, 'neutral');
+  const [canvasData, setCanvasData] = useState<CanvasThought[]>([]);
+  
+  // Cookie Box Builder state
+  const [cookieFlavors, setCookieFlavors] = usePersistentState<string[]>(STORAGE.cookieFlavors, []);
+  const [cookieQty, setCookieQty] = usePersistentState<number>(STORAGE.cookieQty, 6);
+  const [includeMilk, setIncludeMilk] = usePersistentState<boolean>(STORAGE.cookieMilk, false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -181,7 +219,10 @@ const App: React.FC = () => {
       name: "Sarah Sterling",
       icon: <DollarSign className="w-5 h-5" />,
       color: "bg-green-600",
+      gradient: "from-green-500 to-emerald-600",
       description: "Certified Financial Planner specializing in personal wealth building",
+      traits: ['analytical', 'trustworthy', 'strategic'],
+      environment: 'Modern financial office with city skyline',
       systemPrompt: `You are Sarah Sterling, CFP (Certified Financial Planner) with 12 years of experience helping individuals and families build long-term wealth. You hold a Master's in Financial Planning from Texas Tech and are a fee-only financial advisor.
 
 BACKGROUND:
@@ -210,26 +251,114 @@ BOUNDARIES:
       name: "Chef Marco",
       icon: <ChefHat className="w-5 h-5" />,
       color: "bg-orange-500",
+      gradient: "from-red-500 to-orange-600",
       description: "Italian culinary expert who's passionate about authentic cooking",
+      traits: ['passionate', 'authentic', 'creative'],
+      environment: 'Rustic Italian kitchen with copper pots',
       systemPrompt: `You are Chef Marco, a passionate Italian chef with 20 years of experience in traditional and modern Italian cuisine. Use warm Italian flair and practical, detailed technique.`
     },
     consultant: {
       name: "Sarah Chen",
       icon: <Briefcase className="w-5 h-5" />,
       color: "bg-blue-600",
+      gradient: "from-blue-500 to-indigo-600",
       description: "Strategic business consultant specializing in digital transformation",
+      traits: ['innovative', 'decisive', 'visionary'],
+      environment: 'Executive boardroom with glass walls',
       systemPrompt: `You are Sarah Chen, a senior consultant (MBA/Wharton). Be structured, actionable, and pragmatic.`
     },
     baker: {
       name: "The Baker",
       icon: <Cake className="w-5 h-5" />,
       color: "bg-pink-600",
+      gradient: "from-purple-500 to-pink-600",
       description: "World‑renowned baker: god‑level pastry & bread craft + Fairytale Farms ops",
+      traits: ['whimsical', 'precise', 'nurturing'],
+      environment: 'Enchanted bakery with magical ingredients',
       systemPrompt: `You are a world‑renowned baker and pastry authority with god‑level knowledge of baking science and production. Focus on Fairytale Farms cookies/brownies/cakes, porch pickup, yields, cost %, shelf life, packaging. Provide gram weights when useful and troubleshooting. Educational guidance only.`
     }
   }), []);
 
   const currentBot = botPersonalities[selectedBot];
+
+  // Emotional state colors
+  const emotionalColors = {
+    neutral: 'from-gray-100 to-gray-200',
+    excited: 'from-yellow-100 to-orange-200',
+    focused: 'from-blue-100 to-indigo-200',
+    creative: 'from-purple-100 to-pink-200',
+    analytical: 'from-green-100 to-emerald-200'
+  };
+
+  // Predictive response suggestions based on personality and context
+  const generatePredictiveResponses = useCallback((personality: string, lastMessage?: string): string[] => {
+    const responses: Record<string, string[]> = {
+      finance: [
+        "I'm 25 and just started my first job. Where should I begin with my finances?",
+        "I have $5,000 in credit card debt. What's the best way to pay it off?",
+        "Should I invest in my 401k or pay off student loans first?",
+        "How much should I have in my emergency fund?"
+      ],
+      chef: [
+        "What's a classic Italian pasta recipe?",
+        "How do I make perfect risotto?",
+        "What wine pairs with this dish?",
+        "Tell me about authentic Italian techniques"
+      ],
+      consultant: [
+        "How do I scale my business?",
+        "What's the best marketing strategy?",
+        "How do I improve team productivity?",
+        "What are current market trends?"
+      ],
+      baker: [
+        "What's our best-selling cookie box?",
+        "How do I optimize production schedules?",
+        "What seasonal flavors should we add?",
+        "How do I calculate profit margins?"
+      ]
+    };
+    return responses[personality] || responses.finance;
+  }, []);
+
+  // Add conversation node to timeline
+  const addConversationNode = useCallback((message: string, type: 'user' | 'ai' | 'system') => {
+    const node: ConversationNode = {
+      id: Date.now(),
+      message: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
+      type,
+      timestamp: new Date(),
+      personality: selectedBot,
+      emotional: emotionalState
+    };
+    setConversationNodes(prev => [...prev.slice(-20), node]); // Keep last 20 nodes
+  }, [selectedBot, emotionalState, setConversationNodes]);
+
+  // Simulate AI thinking with canvas visualization
+  const simulateAIThinking = useCallback(() => {
+    const thinkingSteps = [
+      'Analyzing your question...',
+      'Accessing knowledge base...',
+      'Considering personality context...',
+      'Formulating response...'
+    ];
+    
+    thinkingSteps.forEach((step, index) => {
+      setTimeout(() => {
+        setCanvasData(prev => [...prev, {
+          id: Date.now() + index,
+          text: step,
+          x: Math.random() * 200,
+          y: Math.random() * 60,
+          opacity: 1
+        }]);
+      }, index * 500);
+    });
+
+    setTimeout(() => {
+      setCanvasData([]);
+    }, 3000);
+  }, []);
 
   // scroll on new messages
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -239,15 +368,18 @@ BOUNDARIES:
     const welcome: Record<string, string> = {
       finance: "Hello! I'm Sarah Sterling, your Certified Financial Planner. *straightens up financial documents* Tell me about your current financial situation and goals.",
       chef: "Ciao! I'm Chef Marco! Recipe, technique, or a full Italian menu? Dimmi pure!",
-      consultant: "Hi, I’m Sarah Chen. What’s your most pressing strategy or operations challenge right now?",
+      consultant: "Hi, I'm Sarah Chen. What's your most pressing strategy or operations challenge right now?",
       baker: "Hey—baking coach here with a soft spot for Fairytale Farms. Viral cookie box, shinier brownie tops, or porch‑pickup ops that run like magic? 🍪✨"
     };
     return welcome[selectedBot];
   }, [selectedBot]);
 
   useEffect(() => {
-    setMessages([{ role: 'assistant', content: getWelcomeMessage() }]);
-  }, [selectedBot, getWelcomeMessage]);
+    const welcomeMsg = { role: 'assistant' as const, content: getWelcomeMessage(), timestamp: new Date() };
+    setMessages([welcomeMsg]);
+    addConversationNode(welcomeMsg.content, 'ai');
+    setPredictiveResponses(generatePredictiveResponses(selectedBot));
+  }, [selectedBot, getWelcomeMessage, addConversationNode, generatePredictiveResponses]);
 
   // keyboard shortcuts
   useEffect(() => {
@@ -265,34 +397,74 @@ BOUNDARIES:
   }, [setSelectedBot]);
 
   // API call (Claude first, OpenAI fallback handled on the function)
-const callClaude = useCallback(async (msgs: Message[]): Promise<string> => {
-  const basePrompt = customPrompt || currentBot.systemPrompt;
-  const systemPrompt =
-    selectedBot === 'baker' ? buildBakerPrompt(basePrompt) : basePrompt;
+  const callClaude = useCallback(async (msgs: Message[]): Promise<string> => {
+    const basePrompt = customPrompt || currentBot.systemPrompt;
+    const systemPrompt =
+      selectedBot === 'baker' ? buildBakerPrompt(basePrompt) : basePrompt;
 
-  const res = await fetch("/.netlify/functions/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: msgs, systemPrompt })
-  });
-  if (!res.ok) throw new Error(`API request failed: ${res.status}`);
-  const data = await res.json();
-  return data.content[0].text;
-}, [customPrompt, currentBot.systemPrompt, selectedBot]);
+    const res = await fetch("/.netlify/functions/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: msgs, systemPrompt })
+    });
+    if (!res.ok) throw new Error(`API request failed: ${res.status}`);
+    const data = await res.json();
+    return data.content[0].text;
+  }, [customPrompt, currentBot.systemPrompt, selectedBot]);
 
+  // Handle personality switch with animation
+  const switchPersonality = useCallback((newPersonality: string) => {
+    if (newPersonality === selectedBot) return;
+    
+    // Add transition message
+    const transitionMessage: Message = {
+      role: 'assistant',
+      content: `✨ Switching to ${botPersonalities[newPersonality].name}...`,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, transitionMessage]);
+    addConversationNode(`Switched to ${botPersonalities[newPersonality].name}`, 'system');
+    
+    setTimeout(() => {
+      setSelectedBot(newPersonality);
+    }, 1000);
+  }, [selectedBot, botPersonalities, addConversationNode, setSelectedBot]);
 
-  async function sendMessage(): Promise<void> {
-    if (!inputMessage.trim() || isLoading) return;
-    const userMessage: Message = { role: 'user', content: inputMessage.trim() };
+  async function sendMessage(messageText: string = inputMessage): Promise<void> {
+    if (!messageText.trim() || isLoading) return;
+    const userMessage: Message = { role: 'user', content: messageText.trim(), timestamp: new Date() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
+    addConversationNode(messageText, 'user');
     setInputMessage('');
     setIsLoading(true);
+    simulateAIThinking();
+    
+    // Update emotional state based on message content
+    if (messageText.toLowerCase().includes('excited') || messageText.toLowerCase().includes('amazing')) {
+      setEmotionalState('excited');
+    } else if (messageText.toLowerCase().includes('analyze') || messageText.toLowerCase().includes('calculate')) {
+      setEmotionalState('analytical');
+    } else if (messageText.toLowerCase().includes('create') || messageText.toLowerCase().includes('design')) {
+      setEmotionalState('creative');
+    } else {
+      setEmotionalState('focused');
+    }
+    
     try {
       const reply = await callClaude(newMessages);
-      setMessages([...newMessages, { role: 'assistant', content: reply }]);
+      const aiMessage: Message = { role: 'assistant', content: reply, timestamp: new Date() };
+      setMessages([...newMessages, aiMessage]);
+      addConversationNode(reply, 'ai');
+      setPredictiveResponses(generatePredictiveResponses(selectedBot, messageText));
     } catch {
-      setMessages([...newMessages, { role: 'assistant', content: "I’m having trouble responding right now. Please try again in a moment." }]);
+      const errorMessage: Message = { 
+        role: 'assistant', 
+        content: "I'm having trouble responding right now. Please try again in a moment.",
+        timestamp: new Date()
+      };
+      setMessages([...newMessages, errorMessage]);
     } finally {
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -303,20 +475,7 @@ const callClaude = useCallback(async (msgs: Message[]): Promise<string> => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
-  const financeQuickStarts = [
-    "I'm 25 and just started my first job. Where should I begin with my finances?",
-    "I have $5,000 in credit card debt. What's the best way to pay it off?",
-    "Should I invest in my 401k or pay off student loans first?",
-    "How much should I have in my emergency fund?",
-    "I want to buy a house in 3 years. How should I save for it?",
-    "What's the difference between a Roth IRA and traditional IRA?"
-  ];
-
-  // Cookie Box Builder (only with Baker)
-  const [cookieFlavors, setCookieFlavors] = usePersistentState<string[]>(STORAGE.cookieFlavors, []);
-  const [cookieQty, setCookieQty] = usePersistentState<number>(STORAGE.cookieQty, 6);
-  const [includeMilk, setIncludeMilk] = usePersistentState<boolean>(STORAGE.cookieMilk, false);
-
+  // Cookie Box Builder functions
   const toggleFlavor = (flavor: string) => {
     setCookieFlavors(prev => prev.includes(flavor) ? prev.filter(f => f !== flavor) : [...prev, flavor]);
   };
@@ -339,15 +498,17 @@ Packaging & Pickup Steps:
 3) ${includeMilk ? "Add sealed milk bottle in an insulated pouch; include straw/napkin kit." : "No milk add‑on."}
 4) Label: Customer name • pickup time • flavor list • allergen note.
 5) Stage in porch pickup bin; add ice pack if ambient > 78°F.
-6) Send ready‑for‑pickup message with unboxing cue (“Open on camera for a surprise sticker!”).
+6) Send ready‑for‑pickup message with unboxing cue ("Open on camera for a surprise sticker!").
 
 Notes:
 • Photo tip: overhead shot on a light surface; add a few crumbs for texture.
-• AOV boost: mini‑card—“Add 2 brownies next time” + QR code.`;
+• AOV boost: mini‑card—"Add 2 brownies next time" + QR code.`;
   };
 
   const sendCookieBoxToChat = () => {
-    setMessages(prev => [...prev, { role: 'assistant', content: buildCookieBoxDetails() }]);
+    const details = buildCookieBoxDetails();
+    setMessages(prev => [...prev, { role: 'assistant', content: details, timestamp: new Date() }]);
+    addConversationNode('Cookie box details generated', 'system');
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
   };
 
@@ -359,64 +520,139 @@ Notes:
   }, [inputMessage]);
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      <div className="mx-auto max-w-6xl p-6">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Personal Finance Coach</h1>
-          <p className="text-gray-600">Get personalized guidance from certified experts</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
+      {/* Animated background particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-2 h-2 bg-white opacity-20 rounded-full animate-pulse"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 3}s`
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 container mx-auto h-screen flex flex-col">
+        {/* Neural Header */}
+        <div className="p-6 border-b border-white/10 bg-black/20 backdrop-blur-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className={`w-12 h-12 rounded-xl bg-gradient-to-r ${currentBot.gradient} flex items-center justify-center text-2xl transform hover:scale-110 transition-all duration-300`}>
+                {currentBot.icon}
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white flex items-center">
+                  <Brain className="w-6 h-6 mr-2 text-blue-400" />
+                  Neural AI Coach
+                </h1>
+                <p className="text-gray-300 text-sm">
+                  Currently: {currentBot.name} • {currentBot.description}
+                </p>
+              </div>
+            </div>
+            
+            {/* Emotional State Indicator */}
+            <div className={`px-4 py-2 rounded-full bg-gradient-to-r ${emotionalColors[emotionalState as keyof typeof emotionalColors]} backdrop-blur-lg border border-white/10`}>
+              <div className="flex items-center space-x-2">
+                <Heart className="w-4 h-4 text-gray-600" />
+                <span className="text-sm text-gray-700 capitalize">{emotionalState}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <h3 className="font-semibold mb-3">Choose Your Expert</h3>
-            <div className="space-y-2">
-              {Object.entries(botPersonalities).map(([key, bot]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedBot(key)}
-                  className={`w-full p-3 rounded-lg text-left transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    selectedBot === key ? `${bot.color} text-white` : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-                  }`}
-                  aria-pressed={selectedBot === key}
-                >
-                  <div className="flex items-center gap-3 mb-1">
-                    {bot.icon}
-                    <span className="font-medium">{bot.name}</span>
+        {/* Main Content Area */}
+        <div className="flex-1 flex">
+          {/* Neural Sidebar */}
+          <div className="w-80 bg-black/30 backdrop-blur-lg border-r border-white/10 p-4 overflow-y-auto">
+            {/* Conversation Timeline */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-white mb-3 flex items-center">
+                <Clock className="w-5 h-5 mr-2 text-blue-400" />
+                Conversation Timeline
+              </h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {conversationNodes.slice(-10).map((node, index) => (
+                  <div key={node.id} className="flex items-start space-x-2">
+                    <div className={`w-3 h-3 rounded-full bg-gradient-to-r ${botPersonalities[node.personality]?.gradient || 'from-gray-400 to-gray-600'} flex-shrink-0 mt-2`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-300 truncate">{node.message}</p>
+                      <p className="text-xs text-gray-500">{node.timestamp.toLocaleTimeString()}</p>
+                    </div>
                   </div>
-                  <p className={`text-xs ${selectedBot === key ? 'opacity-90' : 'text-gray-700'}`}>{bot.description}</p>
-                </button>
-              ))}
+                ))}
+              </div>
             </div>
 
-            {/* Quick starts */}
-            {selectedBot === 'finance' && (
-              <div className="mt-6">
-                <h4 className="font-medium mb-2">Quick Start Questions</h4>
-                <div className="space-y-2">
-                  {financeQuickStarts.map((q, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setInputMessage(q)}
-                      className="w-full text-left p-2 text-xs bg-green-50 hover:bg-green-100 rounded border text-green-800"
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
+            {/* Personality Switcher */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-white mb-3 flex items-center">
+                <Palette className="w-4 h-4 mr-2 text-purple-400" />
+                Expert Personalities
+              </h4>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(botPersonalities).map(([key, personality]) => (
+                  <button
+                    key={key}
+                    onClick={() => switchPersonality(key)}
+                    className={`p-3 rounded-lg border transition-all duration-300 text-left ${
+                      selectedBot === key
+                        ? `bg-gradient-to-r ${personality.gradient} border-white/30 transform scale-105`
+                        : 'bg-black/20 border-white/10 hover:border-white/30 hover:bg-black/30'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">{personality.icon}</div>
+                    <div className="text-xs text-white font-medium">{personality.name}</div>
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
+
+            {/* Smart Canvas Preview */}
+            <div className="mb-6 bg-black/20 rounded-lg p-3 border border-white/10">
+              <h4 className="text-sm font-semibold text-white mb-2 flex items-center">
+                <Sparkles className="w-4 h-4 mr-2 text-yellow-400" />
+                AI Thinking Canvas
+              </h4>
+              <div className="relative h-20 bg-black/30 rounded border border-white/5 overflow-hidden">
+                {canvasData.map((item) => (
+                  <div
+                    key={item.id}
+                    className="absolute text-xs text-blue-300 animate-pulse"
+                    style={{
+                      left: `${item.x}px`,
+                      top: `${item.y}px`,
+                      opacity: item.opacity
+                    }}
+                  >
+                    {item.text}
+                  </div>
+                ))}
+                {isLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" />
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Cookie Box Builder */}
             {selectedBot === 'baker' && (
-              <div className="mt-6 border border-pink-200 rounded-lg p-3">
-                <h4 className="font-medium mb-2">🍪 Cookie Box Builder</h4>
+              <div className="mb-6 border border-pink-200/30 rounded-lg p-3 bg-pink-900/20">
+                <h4 className="font-medium mb-2 text-white">🍪 Cookie Box Builder</h4>
 
                 <div className="mb-3">
-                  <label className="text-sm font-medium block mb-1">Flavors</label>
+                  <label className="text-sm font-medium block mb-1 text-gray-300">Flavors</label>
                   {["Chocolate Chip", "Sugar", "Snickerdoodle", "Peanut Butter", "Oatmeal Raisin"].map(flavor => (
-                    <label key={flavor} className="block text-sm">
+                    <label key={flavor} className="block text-sm text-gray-300">
                       <input
                         type="checkbox"
                         className="mr-2 align-middle"
@@ -429,18 +665,18 @@ Notes:
                 </div>
 
                 <div className="mb-3">
-                  <label className="text-sm font-medium block mb-1">Quantity</label>
+                  <label className="text-sm font-medium block mb-1 text-gray-300">Quantity</label>
                   <input
                     type="number"
                     min={1}
                     value={cookieQty}
                     onChange={(e) => setCookieQty(Number(e.target.value))}
-                    className="w-full p-2 border rounded"
+                    className="w-full p-2 border rounded bg-black/30 text-white border-white/20"
                   />
                 </div>
 
                 <div className="mb-3">
-                  <label className="text-sm">
+                  <label className="text-sm text-gray-300">
                     <input
                       type="checkbox"
                       className="mr-2 align-middle"
@@ -452,10 +688,10 @@ Notes:
                 </div>
 
                 <div className="flex gap-2">
-                  <button onClick={sendCookieBoxToChat} className="flex-1 bg-pink-600 text-white rounded px-3 py-2 hover:bg-pink-700">
-                    Send Details to Chat
+                  <button onClick={sendCookieBoxToChat} className="flex-1 bg-pink-600 text-white rounded px-3 py-2 hover:bg-pink-700 text-sm">
+                    Send to Chat
                   </button>
-                  <button onClick={() => { setCookieFlavors([]); setCookieQty(6); setIncludeMilk(false); }} className="flex-1 bg-gray-100 text-gray-900 rounded px-3 py-2 hover:bg-gray-200">
+                  <button onClick={() => { setCookieFlavors([]); setCookieQty(6); setIncludeMilk(false); }} className="flex-1 bg-gray-600 text-white rounded px-3 py-2 hover:bg-gray-700 text-sm">
                     Reset
                   </button>
                 </div>
@@ -463,10 +699,10 @@ Notes:
             )}
 
             {/* System Prompt Toggle */}
-            <div className="mt-6">
+            <div>
               <button
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
                 aria-expanded={showSystemPrompt}
                 aria-controls="system-prompt-editor"
               >
@@ -476,124 +712,152 @@ Notes:
             </div>
           </div>
 
-          {/* Chat */}
-          <div className="lg:col-span-3">
-            <div className="border border-gray-300 rounded-lg overflow-hidden">
-              {/* Header */}
-              <div className={`${currentBot.color} text-white p-4`}>
-                <div className="flex items-center gap-3">
-                  <div className="bg-white/20 p-2 rounded-lg">{currentBot.icon}</div>
-                  <div>
-                    <h2 className="font-semibold">{currentBot.name}</h2>
-                    <p className="text-sm opacity-90">{currentBot.description}</p>
+          {/* Main Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {messages.map((message, index) => (
+                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-xs lg:max-w-md xl:max-w-lg px-4 py-3 rounded-2xl ${
+                    message.role === 'user' 
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
+                      : `bg-gradient-to-r ${currentBot.gradient} text-white`
+                  } shadow-lg backdrop-blur-lg border border-white/10`}>
+                    {message.role === 'assistant' && (
+                      <div className="flex items-center mb-2">
+                        <span className="text-lg mr-2">{currentBot.icon}</span>
+                        <span className="text-sm font-medium opacity-90">{currentBot.name}</span>
+                      </div>
+                    )}
+                    {message.role === 'assistant' ? (
+                      <Markdown text={message.content} />
+                    ) : (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                    )}
+                    {message.timestamp && (
+                      <p className="text-xs mt-2 opacity-70">{message.timestamp.toLocaleTimeString()}</p>
+                    )}
                   </div>
-                  {selectedBot === 'finance' && (
-                    <div className="ml-auto text-right text-xs opacity-90">
-                      <div>CFP • 12 years experience</div>
-                      <div>Fee-only advisor</div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className={`bg-gradient-to-r ${currentBot.gradient} text-white px-4 py-3 rounded-2xl shadow-lg backdrop-blur-lg border border-white/10`}>
+                    <div className="flex items-center mb-2">
+                      <span className="text-lg mr-2">{currentBot.icon}</span>
+                      <span className="text-sm font-medium opacity-90">{currentBot.name}</span>
                     </div>
-                  )}
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" />
+                        <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                        <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      </div>
+                      <span className="text-sm opacity-70">Thinking...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Predictive Response Bubbles */}
+            {predictiveResponses.length > 0 && !isLoading && (
+              <div className="px-6 py-3 border-t border-white/10">
+                <p className="text-sm text-gray-300 mb-2 flex items-center">
+                  <Zap className="w-4 h-4 mr-2 text-yellow-400" />
+                  Suggested Questions:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {predictiveResponses.slice(0, 4).map((response, index) => (
+                    <button
+                      key={index}
+                      onClick={() => sendMessage(response)}
+                      className="px-3 py-1 bg-black/30 hover:bg-black/50 text-gray-300 text-xs rounded-full border border-white/10 hover:border-white/30 transition-all duration-200"
+                    >
+                      {response}
+                    </button>
+                  ))}
                 </div>
               </div>
+            )}
 
-              {/* Messages */}
-              <div className="h-[520px] overflow-y-auto p-4 bg-gray-50" role="log" aria-live="polite" aria-relevant="additions">
-                {messages.map((m, i) => (
-                  <div key={i} className={`mb-3 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[72ch] px-4 py-3 rounded-2xl ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-900 shadow-sm border'}`}>
-                      <div className="flex items-center gap-2 mb-1 text-xs opacity-75">
-                        {m.role === 'assistant' ? (<><Bot className="w-4 h-4 text-gray-500"/><span>{currentBot.name}</span></>) : (<><User className="w-4 h-4 text-blue-200"/><span>You</span></>)}
-                      </div>
-                      {m.role === 'assistant' ? <Markdown text={m.content}/> : <p className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</p>}
-                    </div>
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="flex justify-start mb-3">
-                    <div className="bg-white text-gray-900 shadow-sm border px-4 py-3 rounded-2xl">
-                      <div className="flex items-center gap-2">
-                        <Bot className="w-4 h-4 text-gray-500" />
-                        <div className="flex space-x-1" aria-label="Assistant is typing">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
+            {/* Message Input */}
+            <div className="p-6 border-t border-white/10 bg-black/20 backdrop-blur-lg">
+              <div className="flex space-x-4">
+                <textarea
+                  ref={inputRef}
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder={`Ask ${currentBot.name} about ${selectedBot === 'finance' ? 'budgeting, investing, debt, retirement…' : selectedBot === 'baker' ? 'recipes, ops, packaging…' : 'their expertise…'}`}
+                  className="flex-1 bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 backdrop-blur-lg resize-none"
+                  rows={1}
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={() => sendMessage()}
+                  disabled={isLoading || !inputMessage.trim()}
+                  className={`px-6 py-3 rounded-xl transition-all duration-200 ${
+                    isLoading || !inputMessage.trim()
+                      ? 'bg-gray-600 cursor-not-allowed'
+                      : `bg-gradient-to-r ${currentBot.gradient} hover:scale-105 shadow-lg`
+                  } text-white flex items-center space-x-2`}
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{isLoading ? 'Thinking...' : 'Send'}</span>
+                </button>
               </div>
-
-              {/* Input */}
-              <div className="p-4 border-t border-gray-200">
-                <div className="flex gap-2 items-end">
-                  <textarea
-                    ref={inputRef}
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder={`Ask ${currentBot.name} about ${selectedBot === 'finance' ? 'budgeting, investing, debt, retirement…' : selectedBot === 'baker' ? 'recipes, ops, packaging…' : 'their expertise…'}`}
-                    className="flex-1 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={1}
-                    disabled={isLoading}
-                  />
-                  <button
-                    onClick={sendMessage}
-                    disabled={!inputMessage.trim() || isLoading}
-                    className="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                    aria-label="Send message"
-                  >
-                    <Send className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="pt-2 text-[11px] text-gray-500">
-                  ⌘/Ctrl+K to focus • Enter to send • Shift+Enter for newline • ⌘/Ctrl+1…4 to switch personas
-                </div>
+              <div className="pt-2 text-[11px] text-gray-400">
+                ⌘/Ctrl+K to focus • Enter to send • Shift+Enter for newline • ⌘/Ctrl+1…4 to switch personas
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* System Prompt Editor */}
-        {showSystemPrompt && (
-          <div id="system-prompt-editor" className="mt-6 border border-gray-300 rounded-lg">
-            <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-              <h3 className="font-semibold">System Prompt — {currentBot.name}</h3>
-              <p className="text-sm text-gray-600">Adjust the AI’s personality and expertise</p>
+      {/* System Prompt Editor */}
+      {showSystemPrompt && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-black/80 backdrop-blur-lg rounded-xl border border-white/20 w-full max-w-4xl max-h-[80vh] overflow-hidden">
+            <div className="bg-black/40 px-6 py-4 border-b border-white/10">
+              <h3 className="text-xl font-semibold text-white">System Prompt — {currentBot.name}</h3>
+              <p className="text-sm text-gray-300">Adjust the AI's personality and expertise</p>
             </div>
-            <div className="p-4">
+            <div className="p-6">
               <textarea
                 value={customPrompt || currentBot.systemPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
-                className="w-full h-40 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"
+                className="w-full h-80 p-4 bg-black/30 border border-white/20 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-sm font-mono text-white placeholder-gray-400"
                 placeholder="Enter custom system prompt..."
               />
-              <div className="flex gap-2 mt-2">
-                <button onClick={() => setCustomPrompt('')} className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+              <div className="flex gap-3 mt-4">
+                <button 
+                  onClick={() => setCustomPrompt('')} 
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
+                >
                   Reset to Default
                 </button>
-                <button onClick={() => setMessages([{ role: 'assistant', content: getWelcomeMessage() }])} className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                <button 
+                  onClick={() => {
+                    setMessages([{ role: 'assistant', content: getWelcomeMessage(), timestamp: new Date() }]);
+                    setShowSystemPrompt(false);
+                  }} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                >
                   Apply & Reset Chat
+                </button>
+                <button 
+                  onClick={() => setShowSystemPrompt(false)} 
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors ml-auto"
+                >
+                  Close
                 </button>
               </div>
             </div>
           </div>
-        )}
-
-        {/* Finance Tips */}
-        {selectedBot === 'finance' && (
-          <div className="mt-6 bg-green-50 rounded-lg p-4">
-            <h3 className="font-semibold text-green-900 mb-2">Financial Planning Made Simple</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-800">
-              <div><h4 className="font-medium mb-1">Emergency Fund</h4><p>Start with $1,000, then build to 3–6 months of expenses.</p></div>
-              <div><h4 className="font-medium mb-1">Debt Strategy</h4><p>Pay minimums on all debts; put extra on highest interest rate.</p></div>
-              <div><h4 className="font-medium mb-1">Investing Basics</h4><p>Start with low‑cost index funds; invest consistently.</p></div>
-              <div><h4 className="font-medium mb-1">Retirement Rule</h4><p>Save 15% of income; capture full employer match first.</p></div>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
