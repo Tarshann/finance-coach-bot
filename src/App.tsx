@@ -580,7 +580,7 @@ Notes:
                     <div className={`w-3 h-3 rounded-full bg-gradient-to-r ${botPersonalities[node.personality]?.gradient || 'from-gray-400 to-gray-600'} flex-shrink-0 mt-2`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-300 truncate">{node.message}</p>
-                      <p className="text-xs text-gray-500">{node.timestamp.toLocaleTimeString()}</p>
+                      <p className="text-xs text-gray-500">{new Date(node.timestamp).toLocaleTimeString()}</p>
                     </div>
                   </div>
                 ))}
@@ -734,7 +734,7 @@ Notes:
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                     )}
                     {message.timestamp && (
-                      <p className="text-xs mt-2 opacity-70">{message.timestamp.toLocaleTimeString()}</p>
+                      <p className="text-xs mt-2 opacity-70">{new Date(message.timestamp).toLocaleTimeString()}</p>
                     )}
                   </div>
                 </div>
