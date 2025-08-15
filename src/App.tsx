@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Bot, User, Settings, DollarSign, ChefHat, Briefcase, Cake, Brain, Clock, Sparkles, Palette, Heart, Zap, TrendingUp } from 'lucide-react';
-
+import { Send, Settings, DollarSign, ChefHat, Briefcase, Cake, Brain, Clock, Sparkles, Palette, Heart, Zap } from 'lucide-react';
 // ---- Fairytale Farms KB (edit freely) ----
 const FAIRYTALE_FARMS_KB = {
   brand: {
