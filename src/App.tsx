@@ -1,3 +1,13 @@
+const [showLanding, setShowLanding] = useState(true);
+if (showLanding) {
+  return <LandingPage onEnter={() => setShowLanding(false)} />;
+}
+
+// below is your existing app UI (chat + builder + personas) unchanged
+return (
+  /* your current app JSX */
+);
+
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, Settings, DollarSign, ChefHat, Briefcase, Cake, Brain, Clock, Sparkles, Palette, Heart, Zap } from 'lucide-react';
 // ---- Fairytale Farms KB (edit freely) ----
