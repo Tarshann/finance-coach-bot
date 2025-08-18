@@ -414,13 +414,10 @@ function Markdown({ text }: { text: string }) {
   };
 
   return (
-    <div className="prose prose-neutral max-w-none text-sm">
+    <div className="prose prose-neutral dark:prose-invert max-w-none text-sm">
       {blocks.map((b, i) =>
         i % 2 === 1 ? (
-          <pre
-            key={i}
-            className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs overflow-x-auto"
-          >
+          <pre key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs overflow-x-auto dark:border-gray-800 dark:bg-neutral-900/60">
             <code>{b}</code>
           </pre>
         ) : (
@@ -435,15 +432,19 @@ function Markdown({ text }: { text: string }) {
 // Main App (renders after LandingPage)
 // ==========================================================
 const App: React.FC = () => {
-  // Landing gate
-  const [showLanding, setShowLanding] = useState(true);
-  if (showLanding) return <LandingPage onEnter={() => setShowLanding(false)} />;
+  const [showLanding, setShowLanding] = React.useState(true);
+  return showLanding
+    ? <LandingPage onEnter={() => setShowLanding(false)} />
+    : <MainApp />;
+};
 
-  // Core state
-  const [selectedBot, setSelectedBot] = usePersistentState<string>(
-    STORAGE.persona,
-    "baker"
-  );
+export default App;
+
+// Core state
+const [selectedBot, setSelectedBot] = usePersistentState<string>(
+  STORAGE.persona,
+  "baker"
+);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -1558,5 +1559,3 @@ Rules:
     </div>
   );
 };
-
-export default App;
