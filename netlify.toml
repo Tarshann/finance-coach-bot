@@ -1,7 +1,10 @@
 [build]
   command = "npm run build"
+  publish = "dist"
   functions = "netlify/functions"
-  publish = "build"
 
-[functions]
-  node_bundler = "esbuild"
+# SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
