@@ -210,6 +210,23 @@ const App: React.FC = () => {
   const [cookieQty, setCookieQty] = usePersistentState<number>(STORAGE.cookieQty, 6);
   const [includeMilk, setIncludeMilk] = usePersistentState<boolean>(STORAGE.cookieMilk, false);
 
+  // ---- Customer & Pickup form state ----
+const [custName, setCustName] = useState('');
+const [custEmail, setCustEmail] = useState('');
+const [custPhone, setCustPhone] = useState('');
+const [custInsta, setCustInsta] = useState('');
+
+// YYYY-MM-DD and HH:MM (24h or 12h input OK)
+const [pickupDate, setPickupDate] = useState('');
+const [pickupTime, setPickupTime] = useState('');
+const [pickupMethod, setPickupMethod] = useState<'porch' | 'delivery'>('porch');
+const [pickupAddress, setPickupAddress] = useState(''); // only used if delivery
+
+// ---- Order compilation + sending state ----
+const [orderDraft, setOrderDraft] = useState<any | null>(null);
+const [sending, setSending] = useState(false);
+const [sendResult, setSendResult] = useState<null | { ok: boolean; msg: string }>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -511,6 +528,107 @@ Notes:
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0);
   };
 
+  async function compileOrderFromChat() {
+  // Merge Cookie Builder + form state for the extractor context
+  const builderContext = {
+    cookieFlavors,
+    cookieQty,
+    includeMilk,
+    form: {
+      customer: { name: custName, email: custEmail, phone: custPhone, instagram: custInsta },
+      pickup: { date: pickupDate, time: pickupTime, method: pickupMethod, address: pickupAddress }
+    }
+  };
+
+  const extractorSystem = `
+You are OrderExtractor for Fairytale Farms. From the conversation PLUS the provided context, extract a single customer order in STRICT JSON (no markdown, no commentary).
+
+JSON schema:
+{
+  "customer": { "name": "", "email": "", "phone": "", "instagram": "" },
+  "pickup": { "date": "", "time": "", "method": "porch|delivery", "address": "" },
+  "items": [
+    { "type": "cookie", "flavor": "Chocolate Chip", "qty": 6 }
+  ],
+  "add_ons": { "milk": false },
+  "notes": ""
+}
+
+Rules:
+- Prefer explicit values from the provided context (form + builder) when present.
+- If chat mentions a cookie box (6/12/24) with flavors, expand into per-flavor items (split qty evenly if needed).
+- If items are missing, default to Cookie Builder: cookieQty + cookieFlavors split evenly.
+- add_ons.milk = includeMilk.
+- Use 24h time if possible (e.g., "15:00"). Output ONLY valid JSON.`;
+
+  const extractorMessages: Message[] = [
+    ...messages,
+    { role: 'assistant', content: `Context: ${JSON.stringify(builderContext)}` }
+  ];
+
+  try {
+    const res = await fetch("/.netlify/functions/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: extractorMessages,
+        systemPrompt: extractorSystem
+      })
+    });
+    if (!res.ok) throw new Error(`Extractor error ${res.status}`);
+    const data = await res.json();
+    let text = (data.content[0].text as string) || '';
+
+    // Strip accidental code fences
+    text = text.replace(/```json\s*([\s\S]*?)```/i, '$1').replace(/```([\s\S]*?)```/g, '$1').trim();
+
+    const parsed = JSON.parse(text);
+
+    // Ensure form values override if they exist
+    parsed.customer = {
+      name: custName || parsed?.customer?.name || "",
+      email: custEmail || parsed?.customer?.email || "",
+      phone: custPhone || parsed?.customer?.phone || "",
+      instagram: custInsta || parsed?.customer?.instagram || ""
+    };
+    parsed.pickup = {
+      date: pickupDate || parsed?.pickup?.date || "",
+      time: pickupTime || parsed?.pickup?.time || "",
+      method: pickupMethod || parsed?.pickup?.method || "porch",
+      address: pickupMethod === 'delivery' ? (pickupAddress || parsed?.pickup?.address || "") : ""
+    };
+
+    setOrderDraft(parsed);
+    setSendResult(null);
+  } catch (e) {
+    setOrderDraft(null);
+    setSendResult({ ok: false, msg: 'Could not compile order from chat. Add missing details and try again.' });
+  }
+}
+
+async function sendOrderEmail() {
+  if (!orderDraft) return;
+  setSending(true);
+  setSendResult(null);
+  try {
+    const res = await fetch('/.netlify/functions/send-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: 'fairytalefarms.net@gmail.com',
+        order: orderDraft
+      })
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload?.error || 'Send failed');
+    setSendResult({ ok: true, msg: 'Order email sent to fairytalefarms.net@gmail.com!' });
+  } catch (err: any) {
+    setSendResult({ ok: false, msg: err?.message || 'Failed to send email' });
+  } finally {
+    setSending(false);
+  }
+}
+
   // auto-resize textarea
   useEffect(() => {
     const el = inputRef.current; if (!el) return;
@@ -662,6 +780,105 @@ Notes:
                     </label>
                   ))}
                 </div>
+
+{/* —— Customer & Pickup Form —— */}
+{selectedBot === 'baker' && (
+  <div className="mb-6 border rounded-lg p-3 border-amber-200/40 bg-amber-900/10">
+    <h4 className="font-medium mb-2 text-white">🧑‍🍳 Customer & Pickup</h4>
+
+    <div className="grid grid-cols-1 gap-2 text-sm">
+      <div>
+        <label className="block mb-1 font-medium text-gray-200">Customer Name</label>
+        <input value={custName} onChange={e=>setCustName(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" placeholder="e.g., Sarah Johnson" />
+      </div>
+      <div>
+        <label className="block mb-1 font-medium text-gray-200">Email</label>
+        <input type="email" value={custEmail} onChange={e=>setCustEmail(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" placeholder="name@email.com" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block mb-1 font-medium text-gray-200">Phone</label>
+          <input value={custPhone} onChange={e=>setCustPhone(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" placeholder="(555) 555-5555" />
+        </div>
+        <div>
+          <label className="block mb-1 font-medium text-gray-200">Instagram (opt)</label>
+          <input value={custInsta} onChange={e=>setCustInsta(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" placeholder="@handle" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block mb-1 font-medium text-gray-200">Pickup Date</label>
+          <input type="date" value={pickupDate} onChange={e=>setPickupDate(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" />
+        </div>
+        <div>
+          <label className="block mb-1 font-medium text-gray-200">Pickup Time</label>
+          <input type="time" value={pickupTime} onChange={e=>setPickupTime(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" />
+        </div>
+      </div>
+
+      <div>
+        <label className="block mb-1 font-medium text-gray-200">Method</label>
+        <div className="flex items-center gap-3 text-gray-200">
+          <label className="inline-flex items-center">
+            <input type="radio" name="method" className="mr-2" checked={pickupMethod==='porch'} onChange={()=>setPickupMethod('porch')} />
+            Porch Pickup
+          </label>
+          <label className="inline-flex items-center">
+            <input type="radio" name="method" className="mr-2" checked={pickupMethod==='delivery'} onChange={()=>setPickupMethod('delivery')} />
+            Delivery
+          </label>
+        </div>
+      </div>
+
+      {pickupMethod === 'delivery' && (
+        <div>
+          <label className="block mb-1 font-medium text-gray-200">Delivery Address</label>
+          <input value={pickupAddress} onChange={e=>setPickupAddress(e.target.value)} className="w-full p-2 border rounded bg-black/30 text-white border-white/20" placeholder="Street, City, Zip" />
+        </div>
+      )}
+    </div>
+
+    {/* Actions */}
+    <div className="mt-3 flex gap-2">
+      <button
+        onClick={() => {
+          if (!custName || !pickupDate || !pickupTime) {
+            setSendResult({ ok: false, msg: 'Please add at least customer name, pickup date, and time.' });
+            return;
+          }
+          compileOrderFromChat();
+        }}
+        className="flex-1 bg-amber-600 text-white rounded px-3 py-2 hover:bg-amber-700 text-sm"
+      >
+        🧾 Compile Order from Chat
+      </button>
+      <button
+        onClick={sendOrderEmail}
+        disabled={!orderDraft || sending}
+        className="flex-1 bg-emerald-600 text-white rounded px-3 py-2 hover:bg-emerald-700 disabled:bg-gray-600 text-sm"
+      >
+        ✉️ Send Order Email
+      </button>
+    </div>
+
+    {/* Results */}
+    {orderDraft && (
+      <div className="mt-3 rounded border border-emerald-200/40 bg-emerald-900/10 p-3 text-sm">
+        <div className="font-medium text-emerald-200 mb-1">Order Preview</div>
+        <pre className="text-xs overflow-auto bg-black/30 border border-white/10 rounded p-2 text-emerald-100">{JSON.stringify(orderDraft, null, 2)}</pre>
+        <p className="mt-2 text-emerald-200">
+          Confirm name, pickup time, and items. Then click “Send Order Email”.
+        </p>
+      </div>
+    )}
+    {sendResult && (
+      <div className={`mt-2 rounded p-2 text-sm ${sendResult.ok ? 'bg-emerald-900/20 text-emerald-200 border border-emerald-200/40' : 'bg-rose-900/20 text-rose-200 border border-rose-200/40'}`}>
+        {sendResult.msg}
+      </div>
+    )}
+  </div>
+)}
 
                 <div className="mb-3">
                   <label className="text-sm font-medium block mb-1 text-gray-300">Quantity</label>

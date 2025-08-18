@@ -1,5 +1,5 @@
 // netlify/functions/send-order.js
-// Uses Resend (https://resend.com). Add RESEND_API_KEY to Netlify env vars.
+// Uses Resend (https://resend.com); set RESEND_API_KEY in Netlify env.
 export const handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -47,7 +47,7 @@ export const handler = async (event) => {
           }).join('')}
         </ul>
 
-        <h3>Add‑ons</h3>
+        <h3>Add-ons</h3>
         <p>Milk: ${order?.add_ons?.milk ? 'Yes' : 'No'}</p>
 
         ${order?.notes ? `<h3>Notes</h3><p>${order.notes}</p>` : ''}
